@@ -4,6 +4,48 @@
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
+#ifdef __linux__
+#include <sys/resource.h>
+#endif
+
+/* ================= METRICS STRUCT ================= */
+
+typedef struct {
+    double elapsed_sec;   // wall-clock runtime
+    long max_rss_kb;      // peak resident memory
+    uint64_t cpu_cycles;  // filled via perf if needed (placeholder)
+} metrics_t;
+
+/* Wall-clock time (seconds) */
+static inline double now_sec(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec + ts.tv_nsec * 1e-9;
+}
+
+/* Peak memory usage */
+static inline long get_max_rss_kb(void) {
+    #ifdef __linux__
+        struct rusage usage;
+        getrusage(RUSAGE_SELF, &usage);
+        return usage.ru_maxrss;   // Linux: already in KB
+    #else
+        // Windows / unsupported platform
+        return -1;                // Not available
+#endif
+}
+    
+
+/* Metrics helpers */
+static inline void metrics_begin(double *t0) {
+    *t0 = now_sec();
+}
+
+static inline void metrics_end(metrics_t *m, double t0) {
+    m->elapsed_sec = now_sec() - t0;
+    m->max_rss_kb = get_max_rss_kb();
+    m->cpu_cycles = 0;   // populated externally via perf
+}
 
 // ============================================================================
 // CONFIGURATION - Adjust these for experiments
@@ -307,28 +349,28 @@ static void wrap_radix_hybrid(T *arr, size_t size, size_t unused, T *temp) {
 }
 
 // Run single benchmark
-static double benchmark_single(sort_func_t func, T *src, size_t size, 
-                               size_t param, T *work, T *temp, int warmup) {
-    // Copy source to working array
-    memcpy(work, src, size * sizeof(T));
+static int benchmark_single(sort_func_t func, T *src, size_t size, size_t param, T *work, T *temp, int warmup, metrics_t *m) {
     
+    memcpy(work, src, size * sizeof(T));
+
     if (warmup) {
-        // Warmup run (don't time)
         func(work, size, param, temp);
         memcpy(work, src, size * sizeof(T));
     }
-    
-    double start = get_time_us();
+
+    double t0;
+    metrics_begin(&t0);
     func(work, size, param, temp);
-    double end = get_time_us();
-    
+    metrics_end(m, t0);
+
     if (!verify_sorted(work, size)) {
         printf("VERIFICATION FAILED!\n");
-        return -1.0;
+        return 0;
     }
-    
-    return end - start;
+    return 1;
 }
+
+
 
 // ============================================================================
 // MAIN BENCHMARK DRIVER
@@ -391,43 +433,56 @@ int main(int argc, char *argv[]) {
     size_t num_distributions = sizeof(distributions) / sizeof(distributions[0]);
     
     // Print CSV header
-    printf("algorithm,distribution,size,time_us,time_sec,throughput_MB_s,cost_per_GB\n");
-    
-    // Run benchmarks
+    printf("algorithm,distribution,size,time_sec,throughput_MB_s,");
+    printf("memory_MB,cost_per_GB\n");
+
     for (size_t d = 0; d < num_distributions; d++) {
         Distribution dist = distributions[d];
-        
-        // Generate fresh data for each distribution
         generate_data(source, size, dist, 42);
-        
+
         for (size_t a = 0; a < num_algorithms; a++) {
             SortAlgorithm *alg = &algorithms[a];
+
             double total_time = 0.0;
-            
+            long peak_rss_kb = 0;
+
             for (int run = 0; run < num_runs; run++) {
-                double t = benchmark_single(alg->func, source, size, 
-                                           alg->param, work, temp, run == 0);
-                if (t < 0) {
+                metrics_t m;
+                int ok = benchmark_single(
+                    alg->func, source, size,
+                    alg->param, work, temp,
+                    run == 0, &m
+                );
+
+                if (!ok) {
                     printf("ERROR in %s\n", alg->name);
                     continue;
                 }
-                total_time += t;
+
+                total_time += m.elapsed_sec;
+                if (m.max_rss_kb > peak_rss_kb)
+                    peak_rss_kb = m.max_rss_kb;
             }
-            
-            double avg_time_us = total_time / num_runs;
-            double avg_time_sec = avg_time_us / 1e6;
-            double throughput_MB = (size * sizeof(T) / (1024.0 * 1024.0)) / avg_time_sec;
-            
-            // Cost calculation (example: $0.50/hour for CloudLab-ish pricing)
-            // Adjust this based on your actual instance pricing
-            double hourly_cost = 0.50;  // $/hour
-            double cost_per_GB = (hourly_cost / 3600.0) * (avg_time_sec / size_gb);
-            
-            printf("%s,%s,%zu,%.2f,%.6f,%.2f,%.8f\n",
-                   alg->name, dist_name(dist), size,
-                   avg_time_us, avg_time_sec, throughput_MB, cost_per_GB);
+
+            double avg_time_sec = total_time / num_runs;
+            double throughput_MB =
+                (size * sizeof(T) / (1024.0 * 1024.0)) / avg_time_sec;
+
+            double hourly_cost = 0.50; // CloudLab-style example
+            double cost_per_GB =
+                (hourly_cost / 3600.0) * (avg_time_sec / size_gb);
+
+            printf("%s,%s,%zu,%.6f,%.2f,%.2f,%.8f\n",
+                alg->name,
+                dist_name(dist),
+                size,
+                avg_time_sec,
+                throughput_MB,
+                peak_rss_kb / 1024.0,   // MB
+                cost_per_GB);
         }
     }
+
     
     free(source);
     free(work);

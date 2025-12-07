@@ -2,14 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <time.h>
-
-// data type 
-typedef uint32_t T;
-
-// compare function
-static inline int cmp(T a, T b) {
-    return a <= b;
-}
+#include "timsort.h"  // provides T and cmp
 
 // RUN size
 #define RUN 64
@@ -54,7 +47,7 @@ static void merge(T *arr, size_t left, size_t mid, size_t right, T *temp) {
 
 // Avoid making changes to this function skeleton, apart from data type changes if required
 // In this starter code we have used uint32_t, feel free to change it to any other data type if required
-void sort_array(uint32_t *arr, size_t size) {
+void sort_array(T *arr, size_t size) {
 
     if (size <= 1 || arr == NULL) return;
 
@@ -92,51 +85,4 @@ void sort_array(uint32_t *arr, size_t size) {
     free(temp);
 }
 
-int main() {
-    // array size
-    size_t size = 1000000; 
-
-    // initialization
-    T *arr = (T *)malloc(size * sizeof(T));
-    if (!arr) {
-        fprintf(stderr, "Error: failed to allocate input array.\n");
-        return 1;
-    }
-
-    srand((unsigned)time(NULL));
-    for (size_t i = 0; i < size; i++) {
-        // uniform random
-        arr[i] = (T)rand();
-    }
-
-    // copy
-    T *sorted_arr = (T *)malloc(size * sizeof(T)); // Allocate memory for the sorted array
-    if (!sorted_arr) {
-        fprintf(stderr, "Error: failed to allocate sorted array.\n");
-        free(arr);
-        return 1;
-    }
-    for (size_t i = 0; i < size; i++) {
-        sorted_arr[i] = arr[i];
-    }
-
-    // time
-    clock_t start = clock();
-    // sort the copied array
-    sort_array(sorted_arr, size);
-    clock_t end = clock();
-
-    double elapsed = (double)(end - start) / CLOCKS_PER_SEC;
-    printf("Sorted %zu elements in %.6f seconds.\n", size, elapsed);
-
-    // check
-    printf("First 10 elements after sorting:\n");
-    for (size_t i = 0; i < 10 && i < size; i++) {
-        printf("%u ", (unsigned)sorted_arr[i]);
-    }
-    printf("\n");
-
-    free(arr);
-    free(sorted_arr);
-    return 0;
-}
+// (Standalone main removed; sorting.c now provides library functions only)
