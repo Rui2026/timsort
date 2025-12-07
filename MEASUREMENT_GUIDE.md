@@ -1,4 +1,4 @@
-# Measurement & Benchmark Usage Guide (for Rex)
+# Measurement & Benchmark Usage Guide (for Vincent and Rex)
 
 **Maintainer:** Alice (measurement framework & analysis)  
 **User:** Vincent and Rex (algorithm optimization & validation)
