@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef int32_t T;        // change data structure we use here
+typedef uint32_t T;        // unified element type for all sorting components
 
 static inline bool cmp(T a, T b) {
     return a <= b;         // sort rule
