@@ -103,8 +103,8 @@ All final conclusions will be based on `cost_per_GB`.
 
 ## 5. When to Rerun Correctness Test
 
-- No need to rerun if only performance optimizations are applied and sorting semantics are unchanged.
-- Must rerun if comparator behavior changes, data type definitions change, or the sorting interface/API changes.
+- **No need to rerun** if only performance optimizations are applied and sorting semantics are unchanged.
+- **Must rerun** if comparator behavior changes, data type definitions change, or the sorting interface/API changes.
 
 ---
 
